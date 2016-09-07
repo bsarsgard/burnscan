@@ -491,10 +491,17 @@ class MainWindow(wx.Frame):
                     self.player_accept.Play()
                     return True
             else:
-                #self.textctrl_result.SetValue("Invalid code!")
-                #self.textctrl_result.SetBackgroundColour(wx.RED)
-                #self.player_reject.Play()
-                return False
+		user_email = ""
+		assigned_name = ""
+		for node in ticket.getElementsByTagName("user_email"):
+			user_email = node.childNodes[0].data
+		for node in ticket.getElementsByTagName("assigned_name"):
+			assigned_name = node.childNodes[0].data
+                self.textctrl_result.SetValue("Code mismatch or xfer from %s to %s" % (user_email, assigned_name))
+                self.textctrl_result.SetBackgroundColour(wx.RED)
+                self.player_reject.Play()
+                return True
+        return False
 
 def crypt(sequence, key):
     sign = (key > 0) * 2 - 1
