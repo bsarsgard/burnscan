@@ -1,7 +1,7 @@
 1. Copy the brt_ticket_export file from the website
 2. Delete the BurnScan.cfg
-3. Copy the BurnScan_default.cfg and rename the copy Burnscan_raw.cfg
-3.5 Open Burnscan_raw.cfg and change the password.
+3. Copy the BurnScan_default.cfg and rename the copy BurnScan_raw.cfg
+3.5 Open BurnScan_raw.cfg and change the password.
 4. Open the command prompt
 5. go to C:\Python27
 6. Type python.exe bs_form.py crypt_config
