@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 """
     BurnScan ticket barcode scanner
     Copyright (C) 2010 Ben Sarsgard
@@ -16,12 +18,17 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+import sys
+import random
+import hashlib
+import argparse
+import re
+import xml.dom.minidom
 import wx
+import wx.adv
 import wx.media
 import ConfigParser
-import random
-import sys
-import xml.dom.minidom
+
 from datetime import datetime
 from datetime import timedelta
 from xml.dom.minidom import Node
@@ -58,7 +65,16 @@ ID_TEXTCTRL_RESULT = 4112
 
 ID_LISTBOX_SEARCHRESULTS = 5110
 
-XML_FILENAME = "brt_ticket_export.xml"
+CFG_PATH = 'BurnScan.cfg'
+
+CFG_SECTION_GENERAL = 'General'
+CFG_DATABASE_PATH = 'database_path'
+CFG_SOUND_ACCEPT = 'sound_accept'
+CFG_SOUND_REJECT = 'sound_reject'
+
+CFG_SECTION_SECURITY = 'Security'
+CFG_PASSWORD_RAW = 'password_raw'
+CFG_PASSWORD_ENC = 'password_enc'
 
 class MainWindow(wx.Frame):
     def __init__(self, parent, id, title):
@@ -66,10 +82,13 @@ class MainWindow(wx.Frame):
         #self.panel = wx.Panel(self)
         #self.panel.Bind(wx.EVT_KEY_UP, self.on_key_up)
 
-        #self.crypt_config()
+        self.args = argparser.parse_args()
         self.load_config()
 
-        self.doc = xml.dom.minidom.parse(XML_FILENAME)
+        if self.args.cryptconfig:
+            self.crypt_config()
+
+        self.doc = xml.dom.minidom.parse(self.config.get(CFG_SECTION_GENERAL, CFG_DATABASE_PATH))
 
         # create the menus
         fileMenu = wx.Menu()
@@ -197,45 +216,60 @@ class MainWindow(wx.Frame):
         self.sizer.Fit(self)
 
         # attach events
-        wx.EVT_MENU(self, ID_ABOUT, self.on_about)
-        wx.EVT_MENU(self, ID_EXIT, self.on_exit)
-        wx.EVT_BUTTON(self, ID_BUTTON_0, self.on_button_0)
-        wx.EVT_BUTTON(self, ID_BUTTON_1, self.on_button_1)
-        wx.EVT_BUTTON(self, ID_BUTTON_2, self.on_button_2)
-        wx.EVT_BUTTON(self, ID_BUTTON_3, self.on_button_3)
-        wx.EVT_BUTTON(self, ID_BUTTON_4, self.on_button_4)
-        wx.EVT_BUTTON(self, ID_BUTTON_5, self.on_button_5)
-        wx.EVT_BUTTON(self, ID_BUTTON_6, self.on_button_6)
-        wx.EVT_BUTTON(self, ID_BUTTON_7, self.on_button_7)
-        wx.EVT_BUTTON(self, ID_BUTTON_8, self.on_button_8)
-        wx.EVT_BUTTON(self, ID_BUTTON_9, self.on_button_9)
-        wx.EVT_BUTTON(self, ID_BUTTON_DEL, self.on_button_del)
-        wx.EVT_BUTTON(self, ID_BUTTON_CODEGO, self.on_button_code_go)
-        wx.EVT_BUTTON(self, ID_BUTTON_SEARCHGO, self.on_button_search_go)
-        wx.EVT_LEFT_DCLICK(self.listbox_searchresults, self.on_left_dclick_search_results)
-        wx.EVT_KEY_UP(self.textctrl_searchfilter, self.on_key_up_search_filter)
-        wx.EVT_KEY_UP(self.textctrl_code, self.on_key_up_code)
-        #wx.EVT_KEY_UP(self, self.on_key_up)
+        self.Bind(wx.EVT_MENU, self.on_about, id=ID_ABOUT)
+        self.Bind(wx.EVT_MENU, self.on_exit, id=ID_EXIT)
+        self.Bind(wx.EVT_BUTTON, self.on_button_0, id=ID_BUTTON_0)
+        self.Bind(wx.EVT_BUTTON, self.on_button_1, id=ID_BUTTON_1)
+        self.Bind(wx.EVT_BUTTON, self.on_button_2, id=ID_BUTTON_2)
+        self.Bind(wx.EVT_BUTTON, self.on_button_3, id=ID_BUTTON_3)
+        self.Bind(wx.EVT_BUTTON, self.on_button_4, id=ID_BUTTON_4)
+        self.Bind(wx.EVT_BUTTON, self.on_button_5, id=ID_BUTTON_5)
+        self.Bind(wx.EVT_BUTTON, self.on_button_6, id=ID_BUTTON_6)
+        self.Bind(wx.EVT_BUTTON, self.on_button_7, id=ID_BUTTON_7)
+        self.Bind(wx.EVT_BUTTON, self.on_button_8, id=ID_BUTTON_8)
+        self.Bind(wx.EVT_BUTTON, self.on_button_9, id=ID_BUTTON_9)
+        self.Bind(wx.EVT_BUTTON, self.on_button_del, id=ID_BUTTON_DEL)
+        self.Bind(wx.EVT_BUTTON, self.on_button_code_go, id=ID_BUTTON_CODEGO)
+        self.Bind(wx.EVT_BUTTON, self.on_button_search_go, id=ID_BUTTON_SEARCHGO)
+        self.Bind(wx.EVT_LEFT_DCLICK, self.on_left_dclick_search_results, id=ID_LISTBOX_SEARCHRESULTS)
+        self.Bind(wx.EVT_KEY_UP, self.on_key_up_search_filter, id=ID_TEXTCTRL_SEARCHFILTER)
+        self.Bind(wx.EVT_KEY_UP, self.on_key_up_code, id=ID_TEXTCTRL_CODE)
 
-        #self.Show(True)
-        self.ShowFullScreen(True, style=wx.FULLSCREEN_ALL)
+        self.Show(True)
+        #self.ShowFullScreen(True, style=wx.FULLSCREEN_ALL)
         self.set_stats()
         self.load_sound()
         self.textctrl_code.SetFocus()
 
     def save_xml(self):
-        fp = open(XML_FILENAME,"w")
+        fp = open(self.database_path,"w")
         self.doc.writexml(fp, "", "", "", "UTF-8")
 
     def load_config(self):
-        config = ConfigParser.RawConfigParser()
-        config.read('BurnScan.cfg')
-        seed = config.getint('General', 'seed') * -1
-        self.password = crypt(config.get('Security', 'password'), seed)
+        self.config = ConfigParser.RawConfigParser()
+        self.config.read(CFG_PATH)
 
     def load_sound(self):
-        self.player_accept = wx.Sound('accept.wav')
-        self.player_reject = wx.Sound('reject.wav')
+        self.player_accept = wx.adv.Sound(self.config.get(CFG_SECTION_GENERAL, CFG_SOUND_ACCEPT))
+        self.player_reject = wx.adv.Sound(self.config.get(CFG_SECTION_GENERAL, CFG_SOUND_REJECT))
+
+    def crypt_config(self):
+        if self.config.has_option(CFG_SECTION_SECURITY, CFG_PASSWORD_RAW):
+            password_raw = self.config.get(CFG_SECTION_SECURITY, CFG_PASSWORD_RAW)
+            password_enc = hashlib.sha256(password_raw.encode()).hexdigest()
+            self.config.set(CFG_SECTION_SECURITY, CFG_PASSWORD_ENC, password_enc)
+            self.config.remove_option(CFG_SECTION_SECURITY, CFG_PASSWORD_RAW)
+            configfile = open(CFG_PATH, 'wb')
+            self.config.write(configfile)
+            print "Password encrypted!"
+            return True
+        else:
+            if self.config.has_option(CFG_SECTION_SECURITY, CFG_PASSWORD_ENC):
+                print "Password already encrypted!"
+                return False
+            else:
+                print "No password to encrypt!"
+                return False
 
     def on_about(self, e):
         d = wx.MessageDialog(self, "BurnScan ticket scanning station\n"
@@ -249,11 +283,19 @@ class MainWindow(wx.Frame):
         authorized = False
         dialog = wx.PasswordEntryDialog(self, 'Password:', 'authenticate yourself')
         if dialog.ShowModal() == wx.ID_OK:
-            if str(dialog.GetValue()) == str(self.password):
-                authorized = True
+            answer = str(dialog.GetValue())
+            if self.config.has_option(CFG_SECTION_SECURITY, CFG_PASSWORD_ENC):
+                password = self.config.get(CFG_SECTION_SECURITY, CFG_PASSWORD_ENC)
+                answer_hash = hashlib.sha256(answer.encode()).hexdigest()
+                if answer_hash == password:
+                    authorized = True 
             else:
-                dialog = wx.MessageDialog(self, 'Invalid Password', 'Authentication Failed')
-                dialog.ShowModal()
+                password = self.config.get(CFG_SECTION_SECURITY, CFG_PASSWORD_RAW)
+            	if answer == password:
+            	   authorized = True 
+        if not authorized:
+            dialog = wx.MessageDialog(self, 'Invalid Password', 'Authentication Failed')
+            dialog.ShowModal()
         dialog.Destroy()
         return authorized
 
@@ -324,7 +366,7 @@ class MainWindow(wx.Frame):
         if key_code == wx.WXK_RETURN:
             self.check_code()
             self.listbox_searchresults.Clear()
-        elif chr(key_code) == '0' or chr(key_code) == '1' or chr(key_code) == '2' or chr(key_code) == '3' or chr(key_code) == '4' or chr(key_code) == '5' or chr(key_code) == '6' or chr(key_code) == '7' or chr(key_code) == '8' or chr(key_code) == '9':
+        elif re.match('[0-9]', chr(key_code)):
             self.textctrl_code.AppendText(chr(key_code))
             self.textctrl_code.SetFocus()
         if key_code == wx.WXK_BACK or key_code == wx.WXK_DELETE:
@@ -463,8 +505,7 @@ class MainWindow(wx.Frame):
                 is_entered = True
                 entered = ticket.getAttribute("entered")
                 if entered and entered != "":
-                    entered_date = datetime.strptime(entered,
-                            "%Y-%m-%d %H:%M:%S")
+                    entered_date = datetime.strptime(entered, "%Y-%m-%d %H:%M:%S")
                     since_entered = datetime.now() - entered_date
                     entered_expiration = timedelta(seconds=10)
                     if since_entered > entered_expiration:
@@ -491,48 +532,21 @@ class MainWindow(wx.Frame):
                     self.player_accept.Play()
                     return True
             else:
-		user_email = ""
-		assigned_name = ""
-		for node in ticket.getElementsByTagName("user_email"):
-			user_email = node.childNodes[0].data
-		for node in ticket.getElementsByTagName("assigned_name"):
-			assigned_name = node.childNodes[0].data
+                user_email = ""
+                assigned_name = ""
+                for node in ticket.getElementsByTagName("user_email"):
+                    user_email = node.childNodes[0].data
+                for node in ticket.getElementsByTagName("assigned_name"):
+                    assigned_name = node.childNodes[0].data
                 self.textctrl_result.SetValue("Code mismatch or xfer from %s to %s" % (user_email, assigned_name))
                 self.textctrl_result.SetBackgroundColour(wx.RED)
                 self.player_reject.Play()
                 return True
         return False
 
-def crypt(sequence, key):
-    sign = (key > 0) * 2 - 1
-    random.seed(abs(key * sign))
-    s = ''
-    for i in xrange(len(sequence)):
-        r = random.randint(0, 255)
-        s += chr((ord(sequence[i]) + r * sign) % 256)
+argparser = argparse.ArgumentParser(description="BurnScan Ticket Station")
+argparser.add_argument("--cryptconfig", action='store_true', help="Encrypt the admin password (if it isn't already encrypted).")
 
-    return s
-
-def crypt_config():
-    new_config = ConfigParser.RawConfigParser()
-    old_config = ConfigParser.RawConfigParser()
-    old_config.read('BurnScan_raw.cfg')
-    seed = random.randint(1, 255)
-
-    new_config.add_section('General')
-    new_config.add_section('Security')
-    new_config.set('General', 'seed', seed)
-    new_config.set('Security', 'password',
-            crypt(old_config.get('Security', 'password'), seed))
-    configfile = open('BurnScan.cfg', 'wb')
-    new_config.write(configfile)
-
-app = wx.PySimpleApp()
-for arg in sys.argv:
-    if arg == 'crypt_config':
-        crypt_config()
-        print "encrypted"
-        sys.exit()
-
+app = wx.App(redirect=True)
 frame = MainWindow(None, wx.ID_ANY, 'BurnScan')
 app.MainLoop()
