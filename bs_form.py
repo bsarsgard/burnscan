@@ -348,8 +348,7 @@ class MainWindow(wx.Frame):
 
     def on_key_up_search_filter(self, e):
         if e.GetKeyCode() == wx.WXK_RETURN:
-            if self.authenticate():
-                self.list_people()
+            self.list_people()
 
         e.StopPropagation()
 
@@ -378,8 +377,7 @@ class MainWindow(wx.Frame):
         self.listbox_searchresults.Clear()
 
     def on_button_search_go(self, e):
-        if self.authenticate():
-            self.list_people()
+        self.list_people()
             
         e.StopPropagation()
 
